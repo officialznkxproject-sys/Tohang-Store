@@ -1,7 +1,6 @@
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers } = require('@whiskeysockets/baileys');
-const qrcode = require('qrcode-terminal');
+const qrcode = require('qrcode');
 const express = require('express');
-const fs = require('fs');
 const path = require('path');
 
 const app = express();
@@ -13,6 +12,7 @@ const { handleIncomingMessage } = require('./handlers/mainHandler');
 
 // Middleware
 app.use(express.json());
+app.use(express.static('public')); // Serve static files
 
 // Custom logger to fix the error
 const logger = {
@@ -25,6 +25,10 @@ const logger = {
     child: () => logger // Fix for the child method error
 };
 
+// Global variable to store QR code
+let currentQR = null;
+let isConnected = false;
+
 // Initialize WhatsApp client
 async function connectToWhatsApp() {
     const { state, saveCreds } = await useMultiFileAuthState('auth_info');
@@ -32,16 +36,18 @@ async function connectToWhatsApp() {
     const sock = makeWASocket({
         auth: state,
         browser: Browsers.macOS('Chrome'),
-        logger: logger, // Use our custom logger
-        printQRInTerminal: false // Remove deprecated option
+        logger: logger,
+        printQRInTerminal: false
     });
 
-    sock.ev.on('connection.update', (update) => {
+    sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
         
         if (qr) {
-            console.log('Scan QR code below:');
-            qrcode.generate(qr, { small: true });
+            // Generate QR code as SVG
+            currentQR = await qrcode.toString(qr, { type: 'svg' });
+            console.log('QR code generated for web display');
+            isConnected = false;
         }
         
         if (connection === 'close') {
@@ -52,6 +58,8 @@ async function connectToWhatsApp() {
             }
         } else if (connection === 'open') {
             console.log('WhatsApp bot connected successfully!');
+            currentQR = null;
+            isConnected = true;
         }
     });
 
@@ -67,15 +75,53 @@ async function connectToWhatsApp() {
     return sock;
 }
 
+// Routes
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+app.get('/qr', (req, res) => {
+    if (currentQR) {
+        res.set('Content-Type', 'image/svg+xml');
+        res.send(`
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+                <rect width="100%" height="100%" fill="white"/>
+                ${currentQR.replace('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">', '').replace('</svg>', '')}
+            </svg>
+        `);
+    } else if (isConnected) {
+        res.set('Content-Type', 'image/svg+xml');
+        res.send(`
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+                <rect width="100%" height="100%" fill="#4CAF50"/>
+                <text x="50" y="50" text-anchor="middle" dy="0.3em" fill="white" font-family="Arial" font-size="5">Connected ✓</text>
+            </svg>
+        `);
+    } else {
+        res.set('Content-Type', 'image/svg+xml');
+        res.send(`
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+                <rect width="100%" height="100%" fill="#FF9800"/>
+                <text x="50" y="50" text-anchor="middle" dy="0.3em" fill="white" font-family="Arial" font-size="5">Generating QR...</text>
+            </svg>
+        `);
+    }
+});
+
+app.get('/status', (req, res) => {
+    res.json({ 
+        connected: isConnected,
+        hasQR: !!currentQR,
+        storeName: config.storeName
+    });
+});
+
 // Start server
 app.listen(PORT, () => {
     console.log(`Tohang Store Bot running on port ${PORT}`);
+    console.log(`Website: http://localhost:${PORT}`);
+    console.log(`QR Code: http://localhost:${PORT}/qr`);
     connectToWhatsApp().catch(console.error);
-});
-
-// Health check endpoint
-app.get('/', (req, res) => {
-    res.json({ status: 'OK', message: 'Tohang Store Bot is running' });
 });
 
 // Handle graceful shutdown
