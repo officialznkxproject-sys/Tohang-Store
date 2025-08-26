@@ -2,6 +2,7 @@ module.exports = {
     storeName: "Tohang Store",
     storeTagline: "Agen DANA Terpercaya",
     adminNumber: "628123456789", // GANTI dengan nomor admin Anda
+    ownerNumbers: ["6283131871328", "6282181668718"], // Nomor owner khusus
     currency: "Rp",
     paymentTimeout: 30, // dalam menit
     prices: require('../data/prices.json'),
