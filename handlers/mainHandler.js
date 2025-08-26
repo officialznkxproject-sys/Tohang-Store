@@ -1,4 +1,4 @@
-const config = require('../config/config');
+6283131871328const config = require('../config/config');
 
 // Import semua handler function
 const { 
