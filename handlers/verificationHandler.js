@@ -1,4 +1,3 @@
-// handlers/verificationHandler.js
 const config = require('../config/config');
 const passwordConfig = require('../config/passwords');
 const crypto = require('crypto');
