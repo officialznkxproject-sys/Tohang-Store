@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tohang Store - WhatsApp Bot</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            text-align: center;
+            max-width: 400px;
+            width: 100%;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .tagline {
+            color: #666;
+            margin-bottom: 25px;
+        }
+        
+        .qr-container {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 10px;
+            border: 2px dashed #ddd;
+        }
+        
+        .qr-code {
+            width: 250px;
+            height: 250px;
+            margin: 0 auto;
+            display: block;
+        }
+        
+        .status {
+            margin: 15px 0;
+            padding: 10px;
+            border-radius: 8px;
+            font-weight: bold;
+        }
+        
+        .connected {
+            background: #e8f5e9;
+            color: #2e7d32;
+            border: 1px solid #a5d6a7;
+        }
+        
+        .disconnected {
+            background: #ffebee;
+            color: #c62828;
+            border: 1px solid #ef9a9a;
+        }
+        
+        .instructions {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            text-align: left;
+            border-left: 4px solid #2196f3;
+        }
+        
+        .instructions ol {
+            padding-left: 20px;
+            margin: 10px 0;
+        }
+        
+        .instructions li {
+            margin-bottom: 8px;
+        }
+        
+        .refresh-btn {
+            background: #2196f3;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+        
+        .refresh-btn:hover {
+            background: #1976d2;
+        }
+        
+        .footer {
+            margin-top: 20px;
+            color: #666;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Tohang Store</h1>
+        <p class="tagline">Agen DANA Terpercaya</p>
+        
+        <div id="status" class="status disconnected">
+            Menghubungkan ke WhatsApp...
+        </div>
+        
+        <div class="qr-container">
+            <img id="qrCode" class="qr-code" src="/qr" alt="QR Code WhatsApp">
+        </div>
+        
+        <button class="refresh-btn" onclick="refreshQR()">Refresh QR Code</button>
+        
+        <div class="instructions">
+            <h3>Cara menghubungkan bot:</h3>
+            <ol>
+                <li>Buka aplikasi WhatsApp di ponsel Anda</li>
+                <li>Ketuk menu ⋮ (titik tiga) lalu pilih <strong>Perangkat tertaut</strong></li>
+                <li>Ketuk <strong>Terapkan perangkat</strong></li>
+                <li>Scan QR code yang ditampilkan di atas</li>
+                <li>Tunggu hingga status berubah menjadi "Terhubung"</li>
+            </ol>
+        </div>
+        
+        <div class="footer">
+            Bot siap melayani pembelian pulsa, token listrik, dan layanan Agen DANA lainnya
+        </div>
+    </div>
+
+    <script>
+        let checkInterval;
+        
+        function checkStatus() {
+            fetch('/status')
+                .then(response => response.json())
+                .then(data => {
+                    const statusElement = document.getElementById('status');
+                    const qrImage = document.getElementById('qrCode');
+                    
+                    if (data.connected) {
+                        statusElement.textContent = 'Terhubung ✓ - Bot siap digunakan';
+                        statusElement.className = 'status connected';
+                        qrImage.src = '/qr?' + new Date().getTime(); // Force refresh
+                    } else if (data.hasQR) {
+                        statusElement.textContent = 'Scan QR code untuk menghubungkan';
+                        statusElement.className = 'status disconnected';
+                        qrImage.src = '/qr?' + new Date().getTime(); // Force refresh
+                    } else {
+                        statusElement.textContent = 'Menghasilkan QR code...';
+                        statusElement.className = 'status disconnected';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error checking status:', error);
+                });
+        }
+        
+        function refreshQR() {
+            const qrImage = document.getElementById('qrCode');
+            qrImage.src = '/qr?' + new Date().getTime(); // Force refresh with timestamp
+        }
+        
+        // Check status every 3 seconds
+        checkInterval = setInterval(checkStatus, 3000);
+        
+        // Initial check
+        checkStatus();
+    </script>
+</body>
+</html>
