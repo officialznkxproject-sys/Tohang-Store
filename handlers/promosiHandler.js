@@ -1,14 +1,25 @@
 // handlers/promosiHandler.js
 const config = require('../config/config');
 
-// Daftar nomor owner yang bisa akses fitur promosi
-const OWNER_NUMBERS = ['6283131871328', '6282181668718']; // Format international
-
 // Function untuk cek apakah nomor adalah owner
 function isOwnerNumber(jid) {
     if (!jid) return false;
-    const number = jid.replace('@s.whatsapp.net', '').replace(/[^0-9]/g, '');
-    return OWNER_NUMBERS.includes(number);
+    
+    // Normalisasi nomor
+    let number = jid.replace('@s.whatsapp.net', '').replace(/[^0-9]/g, '');
+    
+    // Jika nomor diawali dengan '0', ganti dengan '62'
+    if (number.startsWith('0')) {
+        number = '62' + number.substring(1);
+    }
+    
+    // Jika nomor diawali dengan '8', tambahkan '62'
+    if (number.startsWith('8')) {
+        number = '62' + number;
+    }
+    
+    console.log('Checking owner:', number, 'against:', config.ownerNumbers);
+    return config.ownerNumbers.includes(number);
 }
 
 // Generate message promosi
