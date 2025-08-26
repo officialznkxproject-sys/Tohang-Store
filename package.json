@@ -1,11 +1,12 @@
 {
   "name": "tohang-store-bot",
-  "version": "1.0.0",
-  "description": "WhatsApp Business Bot for Tohang Store - Agen DANA Services",
+  "version": "1.1.0",
+  "description": "WhatsApp Business Bot for Tohang Store - Agen DANA Services with Auto-Reconnect",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon server.js"
+    "dev": "nodemon server.js",
+    "monitor": "node monitor.js"
   },
   "dependencies": {
     "@whiskeysockets/baileys": "^6.4.0",
@@ -25,7 +26,9 @@
     "agen",
     "pulsa",
     "token",
-    "listrik"
+    "listrik",
+    "auto-reconnect",
+    "24/7"
   ],
   "author": "Tohang Store",
   "license": "MIT"
