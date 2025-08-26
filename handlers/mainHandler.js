@@ -6,6 +6,7 @@ const commandHandlers = require('./commandHandlers');
 // Import function promosi dari promosiHandler
 const { 
     isOwnerNumber, 
+    normalizePhoneNumber,
     handlePromosi,
     broadcastPromosiToGroups
 } = require('./promosiHandler');
@@ -47,13 +48,25 @@ async function handleOwnerMessage(sock, sender, command) {
                          `Fitur Owner:\n` +
                          `• .promosi - Kirim promosi ke semua grup\n` +
                          `• .status - Status bot lengkap\n` +
-                         `• .broadcast [pesan] - Broadcast ke semua kontak (soon)\n` +
-                         `• .stats - Statistik bot (soon)`;
+                         `• .helpowner - Bantuan fitur owner`;
         
         await sock.sendMessage(sender, { text: statusText });
     }
     else if (command === '.helpowner') {
         await sock.sendMessage(sender, { text: config.ownerWelcomeMessage });
+    }
+    else if (command === '.debugowner') {
+        // Debug info untuk owner
+        const normalizedSender = normalizePhoneNumber(sender);
+        const normalizedOwners = config.ownerNumbers.map(normalizePhoneNumber);
+        
+        const debugText = `🔧 *DEBUG OWNER INFO*\n\n` +
+                        `Your Number: ${normalizedSender}\n` +
+                        `Owner Numbers: ${normalizedOwners.join(', ')}\n` +
+                        `Is Owner: ${isOwnerNumber(sender)}\n` +
+                        `Raw JID: ${sender}`;
+        
+        await sock.sendMessage(sender, { text: debugText });
     }
     else {
         await sock.sendMessage(sender, { 
@@ -65,6 +78,12 @@ async function handleOwnerMessage(sock, sender, command) {
 async function handleIncomingMessage(sock, message) {
     const sender = message.key.remoteJid;
     
+    // Debug info
+    const normalizedSender = normalizePhoneNumber(sender);
+    console.log('Received message from:', sender);
+    console.log('Normalized number:', normalizedSender);
+    console.log('Is owner?', isOwnerNumber(sender));
+    
     // JANGAN proses pesan dari grup, kecuali perintah promosi dari owner
     if (isGroupMessage(sender)) {
         // Cek jika ini perintah promosi dari owner
@@ -72,6 +91,9 @@ async function handleIncomingMessage(sock, message) {
                            (message.message.extendedTextMessage && message.message.extendedTextMessage.text) || '';
         
         const participant = message.key.participant || sender;
+        console.log('Group message from participant:', participant);
+        console.log('Is participant owner?', isOwnerNumber(participant));
+        
         if (messageText.trim() === '.promosi' && isOwnerNumber(participant)) {
             console.log('Owner memerintah promosi dari grup');
             try {
@@ -109,15 +131,16 @@ async function handleIncomingMessage(sock, message) {
     
     const command = messageText.trim().toLowerCase();
     
-    // Log semua pesan yang masuk
-    console.log('Pesan dari:', sender, 'Isi:', command);
-    console.log('Is owner?', isOwnerNumber(sender));
+    console.log('Command received:', command);
     
     try {
         // Cek jika pengirim adalah owner
-        if (isOwnerNumber(sender)) {
+        const ownerCheck = isOwnerNumber(sender);
+        console.log('Owner check result:', ownerCheck);
+        
+        if (ownerCheck) {
             // Sambutan khusus untuk owner
-            if (command === '.hi' || command === '.halo' || command === '.hello' || command === '.hallo' || command === '') {
+            if (command === '.hi' || command === '.halo' || command === '.hello' || command === '.hallo' || command === '' || !command.startsWith('.')) {
                 await sock.sendMessage(sender, { 
                     text: config.ownerWelcomeMessage 
                 });
@@ -125,7 +148,7 @@ async function handleIncomingMessage(sock, message) {
             }
             
             // Handle perintah owner
-            if (command.startsWith('.promosi') || command.startsWith('.status') || command.startsWith('.helpowner')) {
+            if (command.startsWith('.promosi') || command === '.status' || command === '.helpowner' || command === '.debugowner') {
                 await handleOwnerMessage(sock, sender, command);
                 return;
             }
@@ -164,7 +187,7 @@ async function handleIncomingMessage(sock, message) {
         }
         else if (command === '.promosi') {
             // Hanya owner yang bisa jalankan promosi
-            if (isOwnerNumber(sender)) {
+            if (ownerCheck) {
                 await handlePromosi(sock, sender);
             } else {
                 await sock.sendMessage(sender, { 
@@ -176,9 +199,13 @@ async function handleIncomingMessage(sock, message) {
             await commandHandlers.handleHelp(sock, sender);
         }
         else if (command === '.status') {
-            await sock.sendMessage(sender, { 
-                text: `✅ *Status Bot Tohang Store*\n\nBot sedang online dan siap melayani!\n\nTerhubung: ${new Date().toLocaleString('id-ID')}\n\nKetik *.menu* untuk melihat layanan yang tersedia.` 
-            });
+            if (ownerCheck) {
+                await handleOwnerMessage(sock, sender, command);
+            } else {
+                await sock.sendMessage(sender, { 
+                    text: `✅ *Status Bot Tohang Store*\n\nBot sedang online dan siap melayani!\n\nTerhubung: ${new Date().toLocaleString('id-ID')}\n\nKetik *.menu* untuk melihat layanan yang tersedia.` 
+                });
+            }
         }
         else if (command === '.hi' || command === '.halo' || command === '.hello' || command === '.hallo') {
             await sock.sendMessage(sender, { 
@@ -199,7 +226,7 @@ async function handleIncomingMessage(sock, message) {
             let responseText = `👋 Halo! Selamat datang di *Tohang Store*!\n\nSaya adalah bot WhatsApp yang siap membantu Anda dengan berbagai layanan.`;
             
             // Jika ini owner, tambahkan pesan khusus
-            if (isOwnerNumber(sender)) {
+            if (ownerCheck) {
                 responseText += `\n\n👑 *Mode Owner Terdeteksi*\nGunakan *.helpowner* untuk fitur khusus owner.`;
             } else {
                 responseText += `\n\nKetik *.menu* untuk melihat daftar lengkap layanan yang tersedia.`;
