@@ -1,4 +1,4 @@
-// Tambahkan function handlePromosi
+item.name// Tambahkan function handlePromosi
 async function handlePromosi(sock, sender) {
     try {
         // Kirim konfirmasi dulu
