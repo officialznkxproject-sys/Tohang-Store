@@ -1,0 +1,22 @@
+{
+    "insurance": [
+        {"name": "BPJS Kesehatan", "code": "BPJSKS"},
+        {"name": "BPJS Ketenagakerjaan", "code": "BPJSTK"},
+        {"name": "Allianz", "code": "ALLIANZ"},
+        {"name": "Astra", "code": "ASTRA"},
+        {"name": "Prudential", "code": "PRUDENTIAL"},
+        {"name": "Manulife", "code": "MANULIFE"},
+        {"name": "Jiwasraya", "code": "JIWASRAYA"}
+    ],
+    "ewallet": [
+        {"name": "DANA", "code": "DANA"},
+        {"name": "OVO", "code": "OVO"},
+        {"name": "Gopay", "code": "GOPAY"},
+        {"name": "LinkAja", "code": "LINKAJA"}
+    ],
+    "waterProviders": [
+        {"name": "PDAM", "code": "PDAM"},
+        {"name": "AETRA", "code": "AETRA"},
+        {"name": "PALYJA", "code": "PALYJA"}
+    ]
+}
