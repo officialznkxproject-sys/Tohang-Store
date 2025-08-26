@@ -1,5 +1,20 @@
 const config = require('../config/config');
 
+// Import semua handler function
+const { 
+    handleMenu, 
+    handlePulsa, 
+    handleListrik, 
+    handleAsuransi,
+    handleAir,
+    handleBPJS,
+    handleBPJSTK,
+    handleEWallet,
+    handleGames,
+    handlePromo,
+    handleHelp
+} = require('./commandHandlers');
+
 // Function untuk handle panggilan dan blocking
 async function handleCallsAndBlocking(sock, message) {
     // Otomatis tolak semua panggilan
@@ -81,7 +96,7 @@ async function handleIncomingMessage(sock, message) {
         }
         else if (command.startsWith('.')) {
             await sock.sendMessage(sender, { 
-                text: `❌ Perintah *${command}* tidak dikenali.\n\nKetik *.menu* untuk melihat daftar perintah yang tersedia.\n\nAtau ketik *.bantuan* untuk informasi lebih lanjut.` 
+                text: `❌ Perintah *${command}* tidak dikenali.\n\nKetik *.menu* untuk melihat daftar perintah yang tersedia.\n\nAtau ketip *.bantuan* untuk informasi lebih lanjut.` 
             });
         }
         // Auto-response untuk pesan pertama
