@@ -7,8 +7,7 @@ const commandHandlers = require('./commandHandlers');
 const { 
     isOwnerNumber, 
     handlePromosi,
-    broadcastPromosiToGroups,
-    generatePromosiMessage
+    broadcastPromosiToGroups
 } = require('./promosiHandler');
 
 // Function untuk handle panggilan dan blocking
@@ -32,6 +31,35 @@ async function handleCallsAndBlocking(sock, message) {
 // Function untuk cek apakah pesan dari grup
 function isGroupMessage(jid) {
     return jid.endsWith('@g.us');
+}
+
+// Function untuk handle pesan khusus owner
+async function handleOwnerMessage(sock, sender, command) {
+    if (command === '.promosi') {
+        await handlePromosi(sock, sender);
+    }
+    else if (command === '.status') {
+        const statusText = `👑 *STATUS BOT - OWNER PANEL*\n\n` +
+                         `✅ Bot Online & Connected\n` +
+                         `🕐 Last Update: ${new Date().toLocaleString('id-ID')}\n` +
+                         `🏪 Store: ${config.storeName}\n` +
+                         `📞 Owner: ${config.ownerNumbers.join(', ')}\n\n` +
+                         `Fitur Owner:\n` +
+                         `• .promosi - Kirim promosi ke semua grup\n` +
+                         `• .status - Status bot lengkap\n` +
+                         `• .broadcast [pesan] - Broadcast ke semua kontak (soon)\n` +
+                         `• .stats - Statistik bot (soon)`;
+        
+        await sock.sendMessage(sender, { text: statusText });
+    }
+    else if (command === '.helpowner') {
+        await sock.sendMessage(sender, { text: config.ownerWelcomeMessage });
+    }
+    else {
+        await sock.sendMessage(sender, { 
+            text: `❌ Perintah owner *${command}* tidak dikenali.\n\nKetik *.helpowner* untuk melihat fitur owner.` 
+        });
+    }
 }
 
 async function handleIncomingMessage(sock, message) {
@@ -81,10 +109,29 @@ async function handleIncomingMessage(sock, message) {
     
     const command = messageText.trim().toLowerCase();
     
-    // Log semua pesan yang masuk (opsional, untuk debugging)
-    console.log('Pesan pribadi dari:', sender, 'Isi:', command);
+    // Log semua pesan yang masuk
+    console.log('Pesan dari:', sender, 'Isi:', command);
+    console.log('Is owner?', isOwnerNumber(sender));
     
     try {
+        // Cek jika pengirim adalah owner
+        if (isOwnerNumber(sender)) {
+            // Sambutan khusus untuk owner
+            if (command === '.hi' || command === '.halo' || command === '.hello' || command === '.hallo' || command === '') {
+                await sock.sendMessage(sender, { 
+                    text: config.ownerWelcomeMessage 
+                });
+                return;
+            }
+            
+            // Handle perintah owner
+            if (command.startsWith('.promosi') || command.startsWith('.status') || command.startsWith('.helpowner')) {
+                await handleOwnerMessage(sock, sender, command);
+                return;
+            }
+        }
+        
+        // Handle perintah umum untuk semua pengguna
         if (command === '.menu') {
             await commandHandlers.handleMenu(sock, sender);
         } 
@@ -149,9 +196,16 @@ async function handleIncomingMessage(sock, message) {
         }
         else if (messageText.length > 0 && !message.key.fromMe) {
             // Response default untuk pesan biasa
-            await sock.sendMessage(sender, { 
-                text: `👋 Halo! Selamat datang di *Tohang Store*!\n\nSaya adalah bot WhatsApp yang siap membantu Anda dengan berbagai layanan:\n\n• Pembelian pulsa & paket data\n• Token listrik\n• Pembayaran tagihan\n• Dan layanan lainnya\n\nKetik *.menu* untuk melihat daftar lengkap layanan yang tersedia.` 
-            });
+            let responseText = `👋 Halo! Selamat datang di *Tohang Store*!\n\nSaya adalah bot WhatsApp yang siap membantu Anda dengan berbagai layanan.`;
+            
+            // Jika ini owner, tambahkan pesan khusus
+            if (isOwnerNumber(sender)) {
+                responseText += `\n\n👑 *Mode Owner Terdeteksi*\nGunakan *.helpowner* untuk fitur khusus owner.`;
+            } else {
+                responseText += `\n\nKetik *.menu* untuk melihat daftar lengkap layanan yang tersedia.`;
+            }
+            
+            await sock.sendMessage(sender, { text: responseText });
         }
     } catch (error) {
         console.error('Error handling message:', error);
