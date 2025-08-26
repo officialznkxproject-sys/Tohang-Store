@@ -1,0 +1,11 @@
+module.exports = {
+    storeName: "Tohang Store",
+    storeTagline: "Agen DANA Terpercaya",
+    adminNumber: "628123456789", // GANTI dengan nomor admin Anda
+    currency: "Rp",
+    paymentTimeout: 30, // dalam menit
+    prices: require('../data/prices.json'),
+    providers: require('../data/providers.json'),
+    welcomeMessage: `Selamat datang di *{{storeName}}*! 🛍️\n\nKami menyediakan berbagai layanan pembayaran dan pembelian melalui DANA. Gunakan perintah dengan tanda titik (.) untuk mengakses layanan kami.\n\nKetik *.menu* untuk melihat daftar layanan.`,
+    helpMessage: `Butuh bantuan? Silahkan hubungi admin kami di *{{adminNumber}}* atau kunjungi toko kami.\n\nJam Operasional:\nSenin - Minggu: 08.00 - 22.00 WIB`
+};
