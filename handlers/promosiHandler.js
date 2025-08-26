@@ -1,25 +1,47 @@
 // handlers/promosiHandler.js
 const config = require('../config/config');
 
+// Function untuk normalisasi nomor WhatsApp
+function normalizePhoneNumber(jid) {
+    if (!jid) return null;
+    
+    // Extract number from JID
+    let number = jid.replace('@s.whatsapp.net', '').replace(/[^0-9]/g, '');
+    
+    // Remove leading zeros and + sign if any
+    number = number.replace(/^0+/, '').replace(/^\+/, '');
+    
+    // Convert to standard international format (62)
+    if (number.startsWith('62')) {
+        // Already in correct format
+        return number;
+    } else if (number.startsWith('0')) {
+        // Convert from 08xxx to 628xxx
+        return '62' + number.substring(1);
+    } else if (number.startsWith('8')) {
+        // Convert from 8xxx to 628xxx
+        return '62' + number;
+    } else {
+        // Return as is (should already be international format)
+        return number;
+    }
+}
+
 // Function untuk cek apakah nomor adalah owner
 function isOwnerNumber(jid) {
     if (!jid) return false;
     
-    // Normalisasi nomor
-    let number = jid.replace('@s.whatsapp.net', '').replace(/[^0-9]/g, '');
+    // Normalisasi nomor pengirim
+    const senderNumber = normalizePhoneNumber(jid);
+    if (!senderNumber) return false;
     
-    // Jika nomor diawali dengan '0', ganti dengan '62'
-    if (number.startsWith('0')) {
-        number = '62' + number.substring(1);
-    }
+    // Normalisasi semua nomor owner untuk comparison
+    const normalizedOwnerNumbers = config.ownerNumbers.map(ownerNumber => {
+        return normalizePhoneNumber(ownerNumber);
+    });
     
-    // Jika nomor diawali dengan '8', tambahkan '62'
-    if (number.startsWith('8')) {
-        number = '62' + number;
-    }
-    
-    console.log('Checking owner:', number, 'against:', config.ownerNumbers);
-    return config.ownerNumbers.includes(number);
+    console.log('Checking owner:', senderNumber, 'against:', normalizedOwnerNumbers);
+    return normalizedOwnerNumbers.includes(senderNumber);
 }
 
 // Generate message promosi
@@ -141,6 +163,7 @@ async function handlePromosi(sock, sender) {
 
 module.exports = {
     isOwnerNumber,
+    normalizePhoneNumber,
     generatePromosiMessage,
     broadcastPromosiToGroups,
     handlePromosi
