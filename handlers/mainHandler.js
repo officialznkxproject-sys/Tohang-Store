@@ -1,4 +1,4 @@
-6283131871328const config = require('../config/config');
+const config = require('../config/config');
 
 // Import semua handler function
 const { 
@@ -12,8 +12,12 @@ const {
     handleEWallet,
     handleGames,
     handlePromo,
-    handleHelp
+    handleHelp,
+    handlePromosi // Tambah handler promosi
 } = require('./commandHandlers');
+
+// Daftar nomor owner yang bisa akses fitur promosi
+const OWNER_NUMBERS = ['6283131871328', '6282181668718']; // Format international
 
 // Function untuk handle panggilan dan blocking
 async function handleCallsAndBlocking(sock, message) {
@@ -33,7 +37,144 @@ async function handleCallsAndBlocking(sock, message) {
     return false;
 }
 
+// Function untuk cek apakah pesan dari grup
+function isGroupMessage(jid) {
+    return jid.endsWith('@g.us');
+}
+
+// Function untuk cek apakah nomor adalah owner
+function isOwnerNumber(jid) {
+    const number = jid.replace('@s.whatsapp.net', '').replace(/[^0-9]/g, '');
+    return OWNER_NUMBERS.includes(number);
+}
+
+// Function untuk kirim promosi ke semua grup
+async function broadcastPromosiToGroups(sock, message) {
+    try {
+        const groups = await sock.groupFetchAllParticipating();
+        const groupIds = Object.keys(groups);
+        
+        let successCount = 0;
+        let failCount = 0;
+        
+        for (const groupId of groupIds) {
+            try {
+                await sock.sendMessage(groupId, { 
+                    text: generatePromosiMessage() 
+                });
+                successCount++;
+                console.log('Promosi terkirim ke grup:', groupId);
+                
+                // Delay antar pengiriman untuk hindari spam detection
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                
+            } catch (error) {
+                console.error('Gagal kirim promosi ke grup:', groupId, error);
+                failCount++;
+            }
+        }
+        
+        return { successCount, failCount, total: groupIds.length };
+        
+    } catch (error) {
+        console.error('Error fetching groups:', error);
+        throw error;
+    }
+}
+
+// Generate message promosi
+function generatePromosiMessage() {
+    return `🌟 *PROMOSI SPESIAL TOHANG STORE* 🌟
+
+🔥 *Tawaran Terbatas Bulan Ini:*
+
+🎯 *DISKON EKSKLUSIF:*
+• 🤑 Diskon 7% untuk pembelian pulsa di atas 100rb
+• ⚡ Gratis biaya admin untuk pembelian token listrik 200rb
+• 📶 Cashback 3% untuk pembelian paket data 15GB
+• 💳 Cashback 2.5% untuk top up e-wallet DANA/OVO/GoPay
+
+🎁 *BONUS KHUSUS:*
+• ✅ Beli 5x pulsa dapat voucher 15rb
+• ✅ Transaksi 10x dapat merchandise eksklusif Tohang Store
+• ✅ Setiap transaksi dapat poin yang bisa ditukar hadiah
+
+🏆 *KEUNGGULAN KAMI:*
+• ⚡ Proses cepat & otomatis 24/7
+• 🔒 Terjamin aman dan terpercaya
+• 📞 Customer service siap membantu
+• 💰 Harga kompetitif dan terjangkau
+
+🛒 *LAYANAN YANG TERSEDIA:*
+• 📱 Pulsa & Paket Data semua operator
+• ⚡ Token Listrik PLN
+• 💧 Pembayaran tagihan air PDAM
+• 🏥 BPJS Kesehatan & Ketenagakerjaan
+• 🛡️ Pembayaran asuransi
+• 💳 Top up e-wallet (DANA, OVO, GoPay, LinkAja)
+• 🎮 Voucher game (Mobile Legends, Free Fire, PUBG, dll)
+
+⏰ *PERIODE PROMO:*
+Promo berlaku sampai akhir bulan ini saja! Jangan sampai kehabisan!
+
+📞 *HUBUNGI KAMI:*
+• WhatsApp: 083131871328 / 082181668718
+• Instagram: @tohangstore
+• Toko: Jl. Contoh No. 123, Kota Anda
+
+💬 *CARA ORDER:*
+1. Ketik *.menu* untuk melihat layanan
+2. Pilih layanan yang diinginkan
+3. Ikuti instruksi yang diberikan bot
+4. Transfer pembayaran
+5. Kirim bukti transfer ke admin
+6. Pesanan diproses secara instan!
+
+🔒 *GARANSI:*
+• 100% uang kembali jika terjadi gangguan sistem
+• Transaksi tidak jadi? Dana kembali 100%
+• Pelayanan ramah dan profesional
+
+Jangan lewatkan kesempatan emas ini! Buruan order sebelum promo berakhir! 🚀
+
+*TOHANG STORE - AGEN DANA TERPERCAYA* 💙
+`;
+}
+
 async function handleIncomingMessage(sock, message) {
+    const sender = message.key.remoteJid;
+    
+    // JANGAN proses pesan dari grup, kecuali perintah promosi dari owner
+    if (isGroupMessage(sender)) {
+        // Cek jika ini perintah promosi dari owner
+        const messageText = message.message.conversation || 
+                           (message.message.extendedTextMessage && message.message.extendedTextMessage.text) || '';
+        
+        if (messageText.trim() === '.promosi' && isOwnerNumber(message.key.participant || sender)) {
+            console.log('Owner memerintah promosi dari grup');
+            try {
+                // Kirim konfirmasi ke owner dulu
+                await sock.sendMessage(sender, { 
+                    text: '⏳ Memulai promosi ke semua grup...' 
+                });
+                
+                // Jalankan promosi
+                const result = await broadcastPromosiToGroups(sock, message);
+                
+                await sock.sendMessage(sender, { 
+                    text: `✅ Promosi selesai!\n\nBerhasil: ${result.successCount}\nGagal: ${result.failCount}\nTotal: ${result.total} grup` 
+                });
+                
+            } catch (error) {
+                console.error('Error promosi:', error);
+                await sock.sendMessage(sender, { 
+                    text: '❌ Gagal menjalankan promosi: ' + error.message 
+                });
+            }
+        }
+        return; // Stop processing untuk semua pesan grup lainnya
+    }
+    
     // Handle panggilan dan blocking terlebih dahulu
     if (await handleCallsAndBlocking(sock, message)) {
         return;
@@ -44,11 +185,10 @@ async function handleIncomingMessage(sock, message) {
                        (message.message.buttonsResponseMessage && message.message.buttonsResponseMessage.selectedButtonId) ||
                        '';
     
-    const sender = message.key.remoteJid;
     const command = messageText.trim().toLowerCase();
     
     // Log semua pesan yang masuk (opsional, untuk debugging)
-    console.log('Pesan dari:', sender, 'Isi:', command);
+    console.log('Pesan pribadi dari:', sender, 'Isi:', command);
     
     try {
         if (command === '.menu') {
@@ -81,6 +221,16 @@ async function handleIncomingMessage(sock, message) {
         else if (command === '.promo') {
             await handlePromo(sock, sender);
         }
+        else if (command === '.promosi') {
+            // Hanya owner yang bisa jalankan promosi
+            if (isOwnerNumber(sender)) {
+                await handlePromosi(sock, sender);
+            } else {
+                await sock.sendMessage(sender, { 
+                    text: '❌ Maaf, fitur ini hanya untuk owner toko.' 
+                });
+            }
+        }
         else if (command === '.bantuan') {
             await handleHelp(sock, sender);
         }
@@ -96,7 +246,7 @@ async function handleIncomingMessage(sock, message) {
         }
         else if (command.startsWith('.')) {
             await sock.sendMessage(sender, { 
-                text: `❌ Perintah *${command}* tidak dikenali.\n\nKetik *.menu* untuk melihat daftar perintah yang tersedia.\n\nAtau ketip *.bantuan* untuk informasi lebih lanjut.` 
+                text: `❌ Perintah *${command}* tidak dikenali.\n\nKetik *.menu* untuk melihat daftar perintah yang tersedia.\n\nAtau ketik *.bantuan* untuk informasi lebih lanjut.` 
             });
         }
         // Auto-response untuk pesan pertama
@@ -121,4 +271,8 @@ async function handleIncomingMessage(sock, message) {
     }
 }
 
-module.exports = { handleIncomingMessage };
+module.exports = { 
+    handleIncomingMessage,
+    broadcastPromosiToGroups,
+    generatePromosiMessage
+};
