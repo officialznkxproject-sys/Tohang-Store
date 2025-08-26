@@ -1,7 +1,8 @@
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers, delay } = require('@whiskeysockets/baileys');
 const QRCode = require('qrcode');
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -12,7 +13,7 @@ const { handleIncomingMessage } = require('./handlers/mainHandler');
 
 // Middleware
 app.use(express.json());
-app.use(express.static('public')); // Serve static files
+app.use(express.static('public'));
 
 // Custom logger
 const logger = {
@@ -29,18 +30,54 @@ const logger = {
 let currentQR = null;
 let isConnected = false;
 let qrTimeout = null;
+let sock = null;
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 10;
 
-// Initialize WhatsApp client
+// Function to block calls automatically
+function setupCallBlocking(sock) {
+    sock.ev.on('call', async (call) => {
+        const callData = call[0];
+        if (callData && callData.id) {
+            console.log('Panggilan diterima dari:', callData.from);
+            
+            // Otomatis tolak panggilan
+            try {
+                await sock.rejectCall(callData.id, callData.from);
+                console.log('Panggilan otomatis ditolak:', callData.from);
+                
+                // Blokir nomor yang menelpon
+                await sock.updateBlockStatus(callData.from, 'block');
+                console.log('Nomor diblokir:', callData.from);
+                
+            } catch (error) {
+                console.error('Error menolak panggilan:', error);
+            }
+        }
+    });
+}
+
+// Initialize WhatsApp client dengan auto-reconnect
 async function connectToWhatsApp() {
     try {
+        console.log('🔄 Menghubungkan ke WhatsApp...');
+        
         const { state, saveCreds } = await useMultiFileAuthState('auth_info');
         
-        const sock = makeWASocket({
+        sock = makeWASocket({
             auth: state,
             browser: Browsers.macOS('Chrome'),
             logger: logger,
-            printQRInTerminal: false
+            printQRInTerminal: false,
+            markOnlineOnConnect: true,
+            syncFullHistory: false,
+            generateHighQualityLinkPreview: true,
+            shouldIgnoreJid: jid => jid.endsWith('@broadcast'),
+            getMessage: async () => undefined
         });
+
+        // Setup call blocking
+        setupCallBlocking(sock);
 
         sock.ev.on('connection.update', async (update) => {
             const { connection, lastDisconnect, qr } = update;
@@ -48,7 +85,6 @@ async function connectToWhatsApp() {
             if (qr) {
                 console.log('QR code received, generating for web...');
                 try {
-                    // Generate QR code as SVG
                     currentQR = await QRCode.toString(qr, { 
                         type: 'svg',
                         margin: 2,
@@ -58,15 +94,12 @@ async function connectToWhatsApp() {
                             light: '#FFFFFF'
                         }
                     });
-                    console.log('QR code generated successfully for web display');
+                    console.log('QR code generated successfully');
                     isConnected = false;
+                    reconnectAttempts = 0; // Reset reconnect attempts ketika QR baru dihasilkan
                     
-                    // Clear previous timeout
-                    if (qrTimeout) {
-                        clearTimeout(qrTimeout);
-                    }
+                    if (qrTimeout) clearTimeout(qrTimeout);
                     
-                    // Set timeout to refresh QR code after 60 seconds
                     qrTimeout = setTimeout(() => {
                         console.log('QR code expired, generating new one...');
                         currentQR = null;
@@ -78,18 +111,40 @@ async function connectToWhatsApp() {
             
             if (connection === 'close') {
                 const shouldReconnect = lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut;
-                console.log('Connection closed, reconnecting:', shouldReconnect);
+                
+                console.log('❌ Connection closed:', lastDisconnect.error);
+                console.log('Should reconnect:', shouldReconnect);
+                
                 if (shouldReconnect) {
-                    setTimeout(connectToWhatsApp, 3000);
+                    reconnectAttempts++;
+                    const delayTime = Math.min(1000 * reconnectAttempts, 30000); // Exponential backoff max 30 detik
+                    
+                    console.log(`⏳ Attempting reconnect in ${delayTime/1000} seconds (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+                    
+                    if (reconnectAttempts <= MAX_RECONNECT_ATTEMPTS) {
+                        setTimeout(connectToWhatsApp, delayTime);
+                    } else {
+                        console.log('❌ Max reconnect attempts reached. Please check your internet connection.');
+                    }
+                } else {
+                    console.log('❌ Logged out, please scan QR code again');
+                    currentQR = null;
+                    isConnected = false;
                 }
-            } else if (connection === 'open') {
-                console.log('WhatsApp bot connected successfully!');
+            } 
+            else if (connection === 'open') {
+                console.log('✅ WhatsApp bot connected successfully!');
                 currentQR = null;
                 isConnected = true;
+                reconnectAttempts = 0; // Reset reconnect attempts ketika berhasil connect
+                
                 if (qrTimeout) {
                     clearTimeout(qrTimeout);
                     qrTimeout = null;
                 }
+                
+                // Simpan info connection
+                saveConnectionInfo();
             }
         });
 
@@ -97,16 +152,38 @@ async function connectToWhatsApp() {
 
         sock.ev.on('messages.upsert', async (m) => {
             const message = m.messages[0];
-            if (!message.key.fromMe && m.type === 'notify') {
+            if (message && !message.key.fromMe && m.type === 'notify') {
                 await handleIncomingMessage(sock, message);
             }
+        });
+
+        // Handle errors
+        sock.ev.on('error', (error) => {
+            console.error('WhatsApp error:', error);
         });
 
         return sock;
     } catch (error) {
         console.error('Error connecting to WhatsApp:', error);
-        setTimeout(connectToWhatsApp, 5000); // Retry after 5 seconds
+        
+        reconnectAttempts++;
+        const delayTime = Math.min(1000 * reconnectAttempts, 30000);
+        
+        if (reconnectAttempts <= MAX_RECONNECT_ATTEMPTS) {
+            setTimeout(connectToWhatsApp, delayTime);
+        }
     }
+}
+
+// Simpan info koneksi untuk monitoring
+function saveConnectionInfo() {
+    const connectionInfo = {
+        lastConnected: new Date().toISOString(),
+        reconnectAttempts: reconnectAttempts,
+        status: 'connected'
+    };
+    
+    fs.writeFileSync('connection.json', JSON.stringify(connectionInfo, null, 2));
 }
 
 // Routes
@@ -136,10 +213,10 @@ app.get('/qr', (req, res) => {
             <svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300">
                 <rect width="100%" height="100%" fill="#FF9800"/>
                 <text x="150" y="140" text-anchor="middle" fill="white" font-family="Arial" font-size="18" font-weight="bold">
-                    Generating QR...
+                    Reconnecting...
                 </text>
                 <text x="150" y="170" text-anchor="middle" fill="white" font-family="Arial" font-size="12">
-                    Please wait
+                    Attempt ${reconnectAttempts}
                 </text>
             </svg>
         `);
@@ -150,28 +227,73 @@ app.get('/status', (req, res) => {
     res.json({ 
         connected: isConnected,
         hasQR: !!currentQR,
-        storeName: config.storeName
+        storeName: config.storeName,
+        reconnectAttempts: reconnectAttempts,
+        lastUpdate: new Date().toISOString()
     });
 });
 
-// Health check
 app.get('/health', (req, res) => {
     res.json({ 
         status: 'OK', 
         message: 'Tohang Store Bot is running',
+        connected: isConnected,
         timestamp: new Date().toISOString()
     });
 });
 
+// Endpoint untuk memaksa reconnect
+app.post('/reconnect', (req, res) => {
+    if (sock) {
+        console.log('Manual reconnect triggered');
+        reconnectAttempts = 0;
+        connectToWhatsApp();
+        res.json({ status: 'reconnecting' });
+    } else {
+        res.status(400).json({ error: 'Socket not initialized' });
+    }
+});
+
 // Start server
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Tohang Store Bot running on port ${PORT}`);
-    console.log(`Website: http://localhost:${PORT}`);
+    console.log(`🚀 Tohang Store Bot running on port ${PORT}`);
+    console.log(`🌐 Website: http://localhost:${PORT}`);
+    console.log(`⚡ Health check: http://localhost:${PORT}/health`);
+    
+    // Load connection info jika ada
+    try {
+        if (fs.existsSync('connection.json')) {
+            const connectionInfo = JSON.parse(fs.readFileSync('connection.json', 'utf8'));
+            console.log('📊 Last connection:', connectionInfo.lastConnected);
+        }
+    } catch (error) {
+        console.log('No previous connection info found');
+    }
+    
     connectToWhatsApp().catch(console.error);
 });
 
 // Handle graceful shutdown
-process.on('SIGINT', () => {
-    console.log('Shutting down Tohang Store Bot...');
+process.on('SIGINT', async () => {
+    console.log('🛑 Shutting down Tohang Store Bot...');
+    
+    if (sock) {
+        try {
+            await sock.end();
+            console.log('WhatsApp connection closed properly');
+        } catch (error) {
+            console.error('Error closing connection:', error);
+        }
+    }
+    
     process.exit(0);
+});
+
+// Handle uncaught errors
+process.on('uncaughtException', (error) => {
+    console.error('Uncaught Exception:', error);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
 });
