@@ -11,9 +11,16 @@ const PORT = process.env.PORT || 3000;
 const config = require('./config/config');
 const { handleIncomingMessage } = require('./handlers/mainHandler');
 
+// Import verification routes
+const verificationRoutes = require('./routes/verification');
+const { cleanExpiredTokens } = require('./handlers/verificationHandler');
+
 // Middleware
 app.use(express.json());
-app.use(express.static('public'));
+app.use(express.static('public')); // Serve static files
+
+// Use verification routes
+app.use('/', verificationRoutes);
 
 // Custom logger
 const logger = {
@@ -259,6 +266,7 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Tohang Store Bot running on port ${PORT}`);
     console.log(`🌐 Website: http://localhost:${PORT}`);
     console.log(`⚡ Health check: http://localhost:${PORT}/health`);
+    console.log(`🔐 Verification: http://localhost:${PORT}/verify`);
     
     // Load connection info jika ada
     try {
@@ -269,6 +277,10 @@ app.listen(PORT, '0.0.0.0', () => {
     } catch (error) {
         console.log('No previous connection info found');
     }
+    
+    // Clean expired tokens every 5 minutes
+    setInterval(cleanExpiredTokens, 5 * 60 * 1000);
+    console.log('🔄 Auto-clean verification tokens enabled');
     
     connectToWhatsApp().catch(console.error);
 });
